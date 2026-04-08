@@ -417,6 +417,7 @@ export const createOrder = async (userId, orderData) => {
 
 export const getUserOrders = async (userId) => {
   try {
+    console.log('Fetching user orders for:', userId);
     const ordersRef = collection(db, 'orders');
     const q = query(
       ordersRef,
@@ -424,24 +425,85 @@ export const getUserOrders = async (userId) => {
       orderBy('createdAt', 'desc')
     );
     const snapshot = await getDocs(q);
-    return snapshot.docs.map(doc => doc.data());
+    
+    const orders = snapshot.docs.map(doc => {
+      const data = doc.data();
+      return {
+        ...data,
+        totalAmount: typeof data.totalAmount === 'string' ? parseFloat(data.totalAmount) : data.totalAmount,
+      };
+    });
+    
+    console.log('Orders fetched:', orders);
+    return orders;
   } catch (error) {
     console.error('Error fetching user orders:', error);
-    return [];
+    throw error;
   }
 };
 
 export const getAllOrders = async () => {
   try {
+    console.log('Fetching all orders...');
     const ordersRef = collection(db, 'orders');
     const q = query(ordersRef, orderBy('createdAt', 'desc'));
     const snapshot = await getDocs(q);
-    return snapshot.docs.map(doc => doc.data());
+    
+    const orders = snapshot.docs.map(doc => {
+      const data = doc.data();
+      return {
+        ...data,
+        totalAmount: typeof data.totalAmount === 'string' ? parseFloat(data.totalAmount) : data.totalAmount,
+      };
+    });
+    
+    console.log('All orders fetched:', orders);
+    return orders;
   } catch (error) {
     console.error('Error fetching all orders:', error);
-    return [];
+    throw error;
   }
 };
+
+export const subscribeToUserOrders = (userId, callback) => {
+  try {
+    console.log('Subscribing to user orders:', userId);
+    
+    const ordersRef = collection(db, 'orders');
+    const q = query(
+      ordersRef,
+      where('userId', '==', userId),
+      orderBy('createdAt', 'desc')
+    );
+    
+    return onSnapshot(
+      q,
+      snapshot => {
+        const orders = snapshot.docs.map(doc => {
+          const data = doc.data();
+          return {
+            ...data,
+            totalAmount: typeof data.totalAmount === 'string' ? parseFloat(data.totalAmount) : data.totalAmount,
+          };
+        });
+        console.log('User orders updated:', orders);
+        callback(orders);
+      },
+      error => {
+        console.error('Error subscribing to user orders:', error);
+        // Fallback to fetching orders
+        getUserOrders(userId)
+          .then(orders => callback(orders))
+          .catch(err => console.error('Fallback fetch failed:', err));
+      }
+    );
+  } catch (error) {
+    console.error('Error in subscribeToUserOrders:', error);
+    // Return a dummy unsubscribe function
+    return () => {};
+  }
+};
+
 
 export const getOrderById = async (orderId) => {
   try {
@@ -481,17 +543,3 @@ export const subscribeToOrder = (orderId, callback) => {
   });
 };
 
-export const subscribeToUserOrders = (userId, callback) => {
-  const ordersRef = collection(db, 'orders');
-  const q = query(
-    ordersRef,
-    where('userId', '==', userId),
-    orderBy('createdAt', 'desc')
-  );
-  return onSnapshot(q, snapshot => {
-    const orders = snapshot.docs.map(doc => doc.data());
-    callback(orders);
-  }, error => {
-    console.error('Error subscribing to user orders:', error);
-  });
-};

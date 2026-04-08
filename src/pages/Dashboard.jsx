@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { LogOut, User, Package, MapPin, Phone, Mail, Edit2 } from 'lucide-react';
+import { LogOut, User, Package, Mail, Phone, Edit2 } from 'lucide-react';
 import { useAuth } from '../hooks/useAuth';
 import { useNotification } from '../hooks/useNotification';
 import { subscribeToUserOrders, updateUserProfile } from '../firebase/firebaseServices';
@@ -9,6 +9,7 @@ import LoadingSpinner from '../components/LoadingSpinner';
 const Dashboard = () => {
   const { user, userProfile, logout } = useAuth();
   const { notify } = useNotification();
+
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState('profile');
@@ -20,12 +21,19 @@ const Dashboard = () => {
 
   useEffect(() => {
     if (user) {
+      console.log('Setting up order subscription for user:', user.uid);
+      setLoading(true);
+
       const unsubscribe = subscribeToUserOrders(user.uid, (userOrders) => {
+        console.log('Orders received:', userOrders);
         setOrders(userOrders);
         setLoading(false);
       });
 
-      return unsubscribe;
+      return () => {
+        console.log('Cleaning up order subscription');
+        unsubscribe();
+      };
     }
   }, [user]);
 
@@ -48,6 +56,7 @@ const Dashboard = () => {
       notify('Profile updated successfully', 'success');
       setIsEditing(false);
     } catch (error) {
+      console.error('Error updating profile:', error);
       notify('Failed to update profile', 'error');
     } finally {
       setLoading(false);
@@ -96,7 +105,7 @@ const Dashboard = () => {
                     />
                   )}
                   <div>
-                    <p className="font-semibold">{userProfile?.displayName}</p>
+                    <p className="font-semibold">{userProfile?.displayName || user.displayName}</p>
                     <p className="text-sm opacity-90">{user.email}</p>
                   </div>
                 </div>
@@ -106,11 +115,10 @@ const Dashboard = () => {
               <div className="p-4 space-y-2">
                 <button
                   onClick={() => setActiveTab('profile')}
-                  className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition text-left ${
-                    activeTab === 'profile'
+                  className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition text-left ${activeTab === 'profile'
                       ? 'bg-blue-50 text-blue-600 font-semibold'
                       : 'hover:bg-gray-100'
-                  }`}
+                    }`}
                 >
                   <User size={20} />
                   Profile
@@ -118,11 +126,10 @@ const Dashboard = () => {
 
                 <button
                   onClick={() => setActiveTab('orders')}
-                  className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition text-left ${
-                    activeTab === 'orders'
+                  className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition text-left ${activeTab === 'orders'
                       ? 'bg-blue-50 text-blue-600 font-semibold'
                       : 'hover:bg-gray-100'
-                  }`}
+                    }`}
                 >
                   <Package size={20} />
                   Orders
@@ -175,7 +182,7 @@ const Dashboard = () => {
                       />
                     ) : (
                       <p className="text-gray-700 font-medium">
-                        {userProfile?.displayName}
+                        {userProfile?.displayName || user.displayName}
                       </p>
                     )}
                   </div>
@@ -232,13 +239,13 @@ const Dashboard = () => {
                     <p className="text-gray-700">
                       {user.metadata?.creationTime
                         ? new Date(user.metadata.creationTime).toLocaleDateString(
-                            'en-IN',
-                            {
-                              year: 'numeric',
-                              month: 'long',
-                              day: 'numeric',
-                            }
-                          )
+                          'en-IN',
+                          {
+                            year: 'numeric',
+                            month: 'long',
+                            day: 'numeric',
+                          }
+                        )
                         : 'N/A'}
                     </p>
                   </div>
@@ -262,7 +269,10 @@ const Dashboard = () => {
                 <h2 className="text-2xl font-bold mb-6">My Orders</h2>
 
                 {loading ? (
-                  <LoadingSpinner />
+                  <div className="bg-white rounded-lg shadow-md p-8 text-center">
+                    <LoadingSpinner />
+                    <p className="text-gray-600 mt-4">Loading your orders...</p>
+                  </div>
                 ) : orders.length === 0 ? (
                   <div className="bg-white rounded-lg shadow-md p-12 text-center">
                     <Package size={48} className="mx-auto text-gray-400 mb-4" />
@@ -275,57 +285,88 @@ const Dashboard = () => {
                     </Link>
                   </div>
                 ) : (
-                  <div className="space-y-4">
-                    {orders.map((order) => (
-                      <Link
-                        key={order.orderId}
-                        to={`/order/${order.orderId}`}
-                        className="bg-white rounded-lg shadow-md p-6 hover:shadow-lg transition"
-                      >
-                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
-                          <div>
-                            <p className="text-gray-600 text-sm">Order ID</p>
-                            <p className="font-semibold truncate">
-                              {order.orderId}
-                            </p>
-                          </div>
-                          <div>
-                            <p className="text-gray-600 text-sm">Date</p>
-                            <p className="font-semibold">
-                              {order.createdAt
-                                ? new Date(
-                                    order.createdAt.toDate()
-                                  ).toLocaleDateString()
-                                : 'N/A'}
-                            </p>
-                          </div>
-                          <div>
-                            <p className="text-gray-600 text-sm">Total</p>
-                            <p className="font-semibold text-blue-600">
-                              ₹{order.totalAmount.toFixed(2)}
-                            </p>
-                          </div>
-                          <div>
-                            <p className="text-gray-600 text-sm">Status</p>
-                            <p
-                              className={`font-semibold ${
-                                order.orderStatus === 'Delivered'
-                                  ? 'text-green-600'
-                                  : order.orderStatus === 'Cancelled'
-                                  ? 'text-red-600'
-                                  : 'text-blue-600'
-                              }`}
-                            >
-                              {order.orderStatus}
-                            </p>
-                          </div>
-                        </div>
+                  <div className="w-full">
+                    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+                      <div className="space-y-6">
+                        {orders.map((order) => (
+                          <Link
+                            key={order.orderId}
+                            to={`/order/${order.orderId}`}
+                            className="w-full block bg-white rounded-xl shadow-sm border border-gray-100 hover:shadow-md hover:border-gray-200 transition-all duration-200 cursor-pointer group"
+                          >
+                            <div className="p-6">
+                              {/* Order Info Grid */}
+                              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-6">
+                                <div>
+                                  <p className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-1">
+                                    Order ID
+                                  </p>
+                                  <p className="font-bold text-gray-900 text-sm truncate group-hover:text-blue-600 transition-colors">
+                                    {order.orderId}
+                                  </p>
+                                </div>
 
-                        <div className="text-sm text-gray-600">
-                          <span>{order.items.length} item(s)</span>
-                        </div>
-                      </Link>
-                    ))}
+                                <div>
+                                  <p className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-1">
+                                    Date
+                                  </p>
+                                  <p className="font-bold text-gray-900 text-sm">
+                                    {order.createdAt
+                                      ? new Date(
+                                        order.createdAt.toDate?.() || order.createdAt
+                                      ).toLocaleDateString('en-IN', {
+                                        year: 'numeric',
+                                        month: 'short',
+                                        day: 'numeric'
+                                      })
+                                      : 'N/A'}
+                                  </p>
+                                </div>
+
+                                <div>
+                                  <p className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-1">
+                                    Total
+                                  </p>
+                                  <p className="font-bold text-2xl text-blue-600">
+                                    ₹{typeof order.totalAmount === 'number'
+                                      ? order.totalAmount.toFixed(2)
+                                      : parseFloat(order.totalAmount || 0).toFixed(2)}
+                                  </p>
+                                </div>
+
+                                <div>
+                                  <p className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-1">
+                                    Status
+                                  </p>
+                                  <span
+                                    className={`inline-flex px-3 py-1 rounded-full text-xs font-semibold uppercase tracking-wide ${order.orderStatus === 'Delivered'
+                                        ? 'bg-green-100 text-green-800 border border-green-200'
+                                        : order.orderStatus === 'Cancelled'
+                                          ? 'bg-red-100 text-red-800 border border-red-200'
+                                          : order.orderStatus === 'Pending'
+                                            ? 'bg-yellow-100 text-yellow-800 border border-yellow-200'
+                                            : 'bg-blue-100 text-blue-800 border border-blue-200'
+                                      }`}
+                                  >
+                                    {order.orderStatus}
+                                  </span>
+                                </div>
+                              </div>
+
+                              {/* Items Count */}
+                              <div className="flex items-center justify-between pt-4 border-t border-gray-100">
+                                <div className="text-sm text-gray-500">
+                                  <span className="font-medium">{order.items?.length || 0} item(s)</span>
+                                </div>
+                                <div className="text-sm font-medium text-blue-600 hover:text-blue-700 transition-colors">
+                                  View Order →
+                                </div>
+                              </div>
+                            </div>
+                          </Link>
+                        ))}
+                      </div>
+                    </div>
                   </div>
                 )}
               </div>
